@@ -10,6 +10,7 @@ with open(PYSCHO_CSV_FILE, 'w', newline = '') as l:
 
     writer = csv.writer(l)
 
+    writer.writerow(["Name", "Issues", "Age Groups", "Years in Practice", "License", "Recent School", "Graduation Year", "Certificate", "Certificate Date", "Cost per Session", "Sliding Scale", "Insurances", "Website", "Phone Number", "Address"])
     for row in info:
         writer.writerow(list(row))
 

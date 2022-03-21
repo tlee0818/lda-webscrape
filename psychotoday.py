@@ -1,8 +1,11 @@
 import requests
+from urllib import request
 import time
 import bs4
 from bs4 import BeautifulSoup
+import ssl
 
+ssl._create_default_https_context = ssl._create_unverified_context
 HEADER = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'}
 
 def scrape(url):
@@ -10,7 +13,7 @@ def scrape(url):
     pageNum = 0
     nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= HEADER)
     while True:
-        time.sleep(1)  # added a 1 second sleep to limit bot detection
+        time.sleep(0.5)  # added a 1 second sleep to limit bot detection
 
         psycho_soup = BeautifulSoup(nextPage.text, "html.parser")
 
@@ -39,7 +42,8 @@ def get_therapist_info(card):
     number_tab = card_soup.find('a', {'id': 'phone-click-reveal'})
 
     number = "".join(filter(lambda x: x.isnumeric(), list(number_tab.text.strip()))) if number_tab else "See Website"
-    
+    number = number[:11]
+
     address = []
     for addy_part in card_soup.find("div", {"class": "address-data"}).children:
         if addy_part and isinstance(addy_part, bs4.element.Tag) and addy_part.text and addy_part.has_attr("itemprop"):
@@ -99,33 +103,39 @@ def get_therapist_info(card):
 
     
     profile_tab = card_soup.find('div', {'class': 'profile-buttons'})
+    website = card
     if profile_tab:
-        website_button = card_soup.find('a', {'data-event-label': 'website'})
+        website_button = profile_tab.find('a', {'data-event-label': 'website'})
         if website_button:
-            website = website_button.href
-        else:
-            website = "N/A"
-    else:
-        website = "N/A"
+            redirect_url = website_button["href"]
+            redirect_request = request.Request(redirect_url)
+            redirect_request.add_header("User-Agent", 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36')
+            try:
+                response = request.urlopen(redirect_request)
+                website = response.geturl()
+            except Exception as e:
+                website = e
 
     qualifications_tab = card_soup.find('div', {'class': 'profile-qualifications'})
     years_in_practice = "N/A"
     license = "N/A"
     school = "N/A"
     grad_year = "N/A"
-    if qualifications_tab and qualifications_tab.children and list(qualifications_tab.children)[1].ul:
-        qualifications_tab = list(qualifications_tab.children)[1].ul
-        for quals in qualifications_tab:
+    if qualifications_tab and qualifications_tab.ul:
+
+        for quals in qualifications_tab.ul:
             if quals and isinstance(quals, bs4.element.Tag) and quals.strong:
+  
                 category = quals.strong.text
                 unwanted = quals.find('strong')  
                 unwanted.extract()
 
+
                 if category == "Years in Practice:":
                     years_in_practice = quals.text.strip()
                 elif category == "License:":
-                    license = quals.text.strip()
-                elif category == "School":
+                    license = " ".join(quals.text.split())
+                elif category == "School:":
                     school = quals.text.strip()
                 elif category == "Year Graduated:":
                     grad_year = quals.text.strip()
@@ -133,9 +143,8 @@ def get_therapist_info(card):
     credentials_tab = card_soup.find('div', {'class': 'profile-additional-credentials'})
     certificate = "N/A"
     date = "N/A"
-    if credentials_tab and credentials_tab.children and list(credentials_tab.children)[1].ul:
-        credentials_tab = list(credentials_tab.children)[1].ul
-        for cert in credentials_tab:
+    if credentials_tab and credentials_tab.ul:
+        for cert in credentials_tab.ul:
             if cert and isinstance(cert, bs4.element.Tag) and cert.strong:
                 category = cert.strong.text
                 unwanted = cert.find('strong')  
