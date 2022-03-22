@@ -1,8 +1,11 @@
 import requests
+from urllib import request
 import time
 import bs4
 from bs4 import BeautifulSoup
+import ssl
 
+ssl._create_default_https_context = ssl._create_unverified_context
 HEADER = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'}
 
 def scrape(url):
@@ -10,7 +13,7 @@ def scrape(url):
     pageNum = 0
     nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= HEADER)
     while True:
-        time.sleep(1)  # added a 1 second sleep to limit bot detection
+        time.sleep(0.5)  # added a 1 second sleep to limit bot detection
 
         psycho_soup = BeautifulSoup(nextPage.text, "html.parser")
 
@@ -39,33 +42,118 @@ def get_therapist_info(card):
     number_tab = card_soup.find('a', {'id': 'phone-click-reveal'})
 
     number = "".join(filter(lambda x: x.isnumeric(), list(number_tab.text.strip()))) if number_tab else "See Website"
-    
+    number = number[:11]
+
     address = []
     for addy_part in card_soup.find("div", {"class": "address-data"}).children:
         if addy_part and isinstance(addy_part, bs4.element.Tag) and addy_part.text and addy_part.has_attr("itemprop"):
             address.append(addy_part.text.strip())
 
-    services = []
-    service_tab = card_soup.find('ul', {'class': 'attribute-list specialties-list'}).children
-    if service_tab:
-        for service in service_tab:
-            services.append(service.text.strip())
+    issues = []
+    issues_tab = card_soup.find('div', {'class': 'attributes-issues'}).find('ul', {'class': 'attribute-list'}).children
+    if issues_tab:
+        for issue in issues_tab:
+            if issue.text.strip() == "ADHD" or issue.text.strip() == "Testing and Evaluation" or issue.text.strip() == "Learning Disabilities":
+                issues.append(issue.text.strip())
 
-        services_string = ", ".join(filter(lambda x: x,(services)))
+        issues = ", ".join(filter(lambda x: x,(issues)))
 
     else:
-        services = "See Website"
+        issues = "N/A"
+
+    age_groups = []
+    age_tab = card_soup.find('div', {'class': 'attributes-age-focus'})
+    if age_tab and age_tab.find('ul', {'class': 'attribute-list'}).children:
+        age_tab = age_tab.find('ul', {'class': 'attribute-list'}).children
+        for age in age_tab:
+            age_groups.append(age.text.strip())
+
+        age_groups = ", ".join(filter(lambda x: x,(age_groups)))
+
+    else:
+        age_groups = "N/A"
+
 
     finance_tab = card_soup.find('div', {'id': 'tabs-finances-office'})
+    cost = "N/A"
+    sliding_scale = "N/A"
+    insurances_list = []
+    insurances = "N/A"
     if finance_tab:
         cost_tab = finance_tab.find(class_ = "finances-office")
         if cost_tab and cost_tab.ul and cost_tab.ul.li:
-            price = cost_tab.ul.li.text.strip()
-        else:
-            price = "See Website"
-    else:
-        price = "See Website"
-    
-    website = card
+            for info in cost_tab.ul:
+                if info and isinstance(info, bs4.element.Tag) and info.strong:
+                    category = info.strong.text
+                    unwanted = info.find('strong')  
+                    unwanted.extract()
 
-    return (name, services_string, price, website, number, " ".join(address))
+                    if category == "Cost per Session:":
+                        cost = info.text.strip()
+                    elif category == "Sliding Scale:":
+                        sliding_scale = info.text.strip()
+
+        insurance_tab = finance_tab.find(class_="attributes-insurance")
+        if insurance_tab and insurance_tab.ul and insurance_tab.ul.li:
+            for insurance in insurance_tab.ul:
+                if insurance and isinstance(insurance, bs4.element.Tag):
+                    insurances_list.append(insurance.text.strip())
+            
+            insurances = ", ".join(filter(lambda x: x,(insurances_list)))
+
+    
+    profile_tab = card_soup.find('div', {'class': 'profile-buttons'})
+    website = card
+    if profile_tab:
+        website_button = profile_tab.find('a', {'data-event-label': 'website'})
+        if website_button:
+            redirect_url = website_button["href"]
+            redirect_request = request.Request(redirect_url)
+            redirect_request.add_header("User-Agent", 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36')
+            try:
+                response = request.urlopen(redirect_request)
+                website = response.geturl()
+            except Exception as e:
+                website = e
+
+    qualifications_tab = card_soup.find('div', {'class': 'profile-qualifications'})
+    years_in_practice = "N/A"
+    license = "N/A"
+    school = "N/A"
+    grad_year = "N/A"
+    if qualifications_tab and qualifications_tab.ul:
+
+        for quals in qualifications_tab.ul:
+            if quals and isinstance(quals, bs4.element.Tag) and quals.strong:
+  
+                category = quals.strong.text
+                unwanted = quals.find('strong')  
+                unwanted.extract()
+
+
+                if category == "Years in Practice:":
+                    years_in_practice = quals.text.strip()
+                elif category == "License:":
+                    license = " ".join(quals.text.split())
+                elif category == "School:":
+                    school = quals.text.strip()
+                elif category == "Year Graduated:":
+                    grad_year = quals.text.strip()
+
+    credentials_tab = card_soup.find('div', {'class': 'profile-additional-credentials'})
+    certificate = "N/A"
+    date = "N/A"
+    if credentials_tab and credentials_tab.ul:
+        for cert in credentials_tab.ul:
+            if cert and isinstance(cert, bs4.element.Tag) and cert.strong:
+                category = cert.strong.text
+                unwanted = cert.find('strong')  
+                unwanted.extract()
+
+                if category == "Certificate:":
+                    certificate = cert.text.strip()
+                elif category == "Certificate Date:":
+                    date = cert.text.strip()
+
+    
+    return (name, issues, age_groups, years_in_practice, license, school, grad_year, certificate, date, cost, sliding_scale, insurances, website, number, " ".join(address))
