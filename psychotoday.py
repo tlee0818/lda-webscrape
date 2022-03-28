@@ -44,22 +44,40 @@ def get_therapist_info(card):
     number = "".join(filter(lambda x: x.isnumeric(), list(number_tab.text.strip()))) if number_tab else "See Website"
     number = number[:11]
 
-    address = []
-    for addy_part in card_soup.find("div", {"class": "address-data"}).children:
-        if addy_part and isinstance(addy_part, bs4.element.Tag) and addy_part.text and addy_part.has_attr("itemprop"):
-            address.append(addy_part.text.strip())
+    street = "N/A"
+    citystate = "N/A"
+    postalcode = "N/A"
+    addy_soup = card_soup.find("div", {"class": "address-data"})
+    if addy_soup:
+        #street
+        street = addy_soup.find("span", {"itemprop": "streetAddress"}).text.strip() if addy_soup.find("span", {"itemprop": "streetAddress"}) else "N/A"
 
+        #citystate
+        if addy_soup.find("span", {"itemprop": "addressLocality"}) and addy_soup.find("span", {"itemprop": "addressRegion"}):
+            citystate = addy_soup.find("span", {"itemprop": "addressLocality"}).text.strip() + " " + addy_soup.find("span", {"itemprop": "addressRegion"}).text.strip()
+        elif addy_soup.find("span", {"itemprop": "addressLocality"}):
+            citystate = addy_soup.find("span", {"itemprop": "addressLocality"}).text.strip()
+        elif addy_soup.find("span", {"itemprop": "addressRegion"}):
+            citystate = addy_soup.find("span", {"itemprop": "addressRegion"}).text.strip()
+
+        #postalcode
+        postalcode = addy_soup.find("span", {"itemprop": "postalcode"}).text.strip() if addy_soup.find("span", {"itemprop": "postalcode"}) else "N/A"
+
+    #not elegant, but not all therapists have services/issues in their respective tabs. rather, some of them just have it in their bios
+    services = []
     issues = []
-    issues_tab = card_soup.find('div', {'class': 'attributes-issues'}).find('ul', {'class': 'attribute-list'}).children
-    if issues_tab:
-        for issue in issues_tab:
-            if issue.text.strip() == "ADHD" or issue.text.strip() == "Testing and Evaluation" or issue.text.strip() == "Learning Disabilities":
-                issues.append(issue.text.strip())
+    if card_soup.find_all(text=lambda x: x and ("counseling" in x or "Counseling" in x or "testing" in x or "Testing" in x)):
+        services.append("Counseling")
+    if card_soup.find_all(text=lambda x: x and ("evaluation" in x or "Evaluation" in x or "testing" in x or "Testing" in x)):
+        services.append("Testing and Evaluation")
+    
 
-        issues = ", ".join(filter(lambda x: x,(issues)))
-
-    else:
-        issues = "N/A"
+    if card_soup.find_all(text=lambda x: x and "Learning Disabilities" in x):
+        issues.append("Learning Disabilities")
+    if card_soup.find_all(text=lambda x: x and "ADHD" in x):
+        issues.append("ADHD")
+    if card_soup.find_all(text=lambda x: x and ("dysgraphia" in x or "Dysgraphia" in x)):
+        issues.append("Dysgraphia")
 
     age_groups = []
     age_tab = card_soup.find('div', {'class': 'attributes-age-focus'})
@@ -156,4 +174,4 @@ def get_therapist_info(card):
                     date = cert.text.strip()
 
     
-    return (name, issues, age_groups, years_in_practice, license, school, grad_year, certificate, date, cost, sliding_scale, insurances, website, number, " ".join(address))
+    return (name, ", ".join(issues), ", ".join(services), age_groups, years_in_practice, license, school, grad_year, certificate, date, cost, sliding_scale, insurances, website, number, street, citystate, postalcode)
