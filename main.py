@@ -11,22 +11,22 @@ PYSCHO_PSYCHIATRIST_PENN_CSV_FILE = "csv/psychoPsychiatristCSV.csv"
 PYSCHO_URL_PSYCHIATRIST_PENN = "https://www.psychologytoday.com/us/psychiatrists/pennsylvania?sid=62390f910804f&ref="
 
 FIELDS = ["Name", "Issues", "Services", "Age Groups", "Years in Practice", "License", "Recent School", "Graduation Year", "Certificate", "Certificate Date", "Cost per Session", "Sliding Scale", "Insurances", "Website", "Phone Number", "Street Address", "City/State", "Zipcode"]
-psycho_therapist_info = scrape(PSYCHO_URL_THERAPIST_PENN)
+psycho_therapist_info = scrape(PSYCHO_URL_THERAPIST_PENN, FIELDS, PYSCHO_THERAPIST_PENN_CSV_FILE)
 
-with open(PYSCHO_THERAPIST_PENN_CSV_FILE, 'w', newline = '') as l:
+"""with open(PYSCHO_THERAPIST_PENN_CSV_FILE, 'w', newline = '') as l:
 
     writer = csv.writer(l)
 
     writer.writerow(FIELDS)
     for row in psycho_therapist_info:
-        writer.writerow(list(row))
+        writer.writerow(list(row))"""
 
-psycho_psychiatrist_info = scrape(PYSCHO_URL_PSYCHIATRIST_PENN)
+psycho_psychiatrist_info = scrape(PYSCHO_URL_PSYCHIATRIST_PENN, FIELDS, PYSCHO_PSYCHIATRIST_PENN_CSV_FILE)
 
-with open(PYSCHO_PSYCHIATRIST_PENN_CSV_FILE, 'w', newline = '') as l:
+"""with open(PYSCHO_PSYCHIATRIST_PENN_CSV_FILE, 'w', newline = '') as l:
 
     writer = csv.writer(l)
 
     writer.writerow(FIELDS)
     for row in psycho_psychiatrist_info:
-        writer.writerow(list(row))
+        writer.writerow(list(row))"""

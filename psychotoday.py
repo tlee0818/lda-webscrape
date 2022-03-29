@@ -4,38 +4,46 @@ import time
 import bs4
 from bs4 import BeautifulSoup
 import ssl
+import csv
+import random
 
 ssl._create_default_https_context = ssl._create_unverified_context
-HEADER = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'}
+HEADERS = [{'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'},
+{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}]
+SLEEP_TIMES = [0.5, 0.7, 1, 1.2]
 
-def scrape(url):
+def scrape(url, fields, outfile):
     info = []
     pageNum = 0
-    nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= HEADER)
-    while True:
-        time.sleep(0.5)  # added a 1 second sleep to limit bot detection
+    nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= getRandomHeader())
+    with open(outfile, 'w', newline = '') as l:
+        writer = csv.writer(l)
+        writer.writerow(fields)
+        while True:
 
-        psycho_soup = BeautifulSoup(nextPage.text, "html.parser")
+            psycho_soup = BeautifulSoup(nextPage.text, "html.parser")
 
-        # get all cards
-        therapists = psycho_soup.find(class_ = 'results')
+            # get all cards
+            therapists = psycho_soup.find(class_ = 'results')
 
-        for therapist in therapists.children:
-            if therapist and therapist.name == "div" and therapist.has_attr('data-x'):
-                info.append(get_therapist_info(therapist.a["href"]))
-                print(info[-1])
+            for therapist in therapists.children:
+                time.sleep(getRandomSleepTime())  # added a second sleep to limit bot detection
+                if therapist and therapist.name == "div" and therapist.has_attr('data-x'):
+                    info.append(get_therapist_info(therapist.a["href"]))
+                    writer.writerow(list(info[-1]))
+                    print(info[-1])
 
-        if psycho_soup.find("span", {"class": "chevron-right"}):
-            pageNum += 1
-            nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= HEADER)
-            print("_______________________NEW PAGE_______________________")
-        else:
-            break
+            if psycho_soup.find("span", {"class": "chevron-right"}):
+                pageNum += 1
+                nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= getRandomHeader())
+                print(f"_______________________NEW PAGE {pageNum}_______________________")
+            else:
+                break
         
     return info
 
 def get_therapist_info(card):
-    card_soup = BeautifulSoup(requests.get(card, headers= HEADER).text, "html.parser")
+    card_soup = BeautifulSoup(requests.get(card, headers= getRandomHeader()).text, "html.parser")
 
     name = card_soup.find('h1', {'itemprop': 'name'}).text
 
@@ -175,3 +183,10 @@ def get_therapist_info(card):
 
     
     return (name, ", ".join(issues), ", ".join(services), age_groups, years_in_practice, license, school, grad_year, certificate, date, cost, sliding_scale, insurances, website, number, street, citystate, postalcode)
+
+def getRandomHeader():
+    return HEADERS[random.randint(0,1)]
+
+def getRandomSleepTime():
+
+    return SLEEP_TIMES[random.randint(0,3)]
