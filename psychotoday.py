@@ -4,63 +4,100 @@ import time
 import bs4
 from bs4 import BeautifulSoup
 import ssl
+import csv
+import random
 
 ssl._create_default_https_context = ssl._create_unverified_context
-HEADER = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'}
 
-def scrape(url):
+
+#creating multiple user agents and sleeptimes to avoid bot detection
+HEADERS = [{'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'},
+{'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}]
+SLEEP_TIMES = [0.5, 0.7, 1, 1.2]
+
+def scrape(url, fields, outfile):
     info = []
     pageNum = 0
-    nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= HEADER)
-    while True:
-        time.sleep(0.5)  # added a 1 second sleep to limit bot detection
 
-        psycho_soup = BeautifulSoup(nextPage.text, "html.parser")
+    #clicks on the right arrow key in the pagination area
+    nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= getRandomHeader())
+    with open(outfile, 'w', newline = '') as l:
+        writer = csv.writer(l)
+        writer.writerow(fields)
+        while True:
 
-        # get all cards
-        therapists = psycho_soup.find(class_ = 'results')
+            psycho_soup = BeautifulSoup(nextPage.text, "html.parser")
 
-        for therapist in therapists.children:
-            if therapist and therapist.name == "div" and therapist.has_attr('data-x'):
-                info.append(get_therapist_info(therapist.a["href"]))
-                print(info[-1])
+            # get all cards for therapists (or psychiatrists)
+            therapists = psycho_soup.find(class_ = 'results')
 
-        if psycho_soup.find("span", {"class": "chevron-right"}):
-            pageNum += 1
-            nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= HEADER)
-            print("_______________________NEW PAGE_______________________")
-        else:
-            break
+            for therapist in therapists.children:
+                time.sleep(getRandomSleepTime())  # bot detection
+
+                if therapist and therapist.name == "div" and therapist.has_attr('data-x'):
+                    #append therapist info from get_therapist_info()
+                    info.append(get_therapist_info(therapist.a["href"]))
+                    writer.writerow(list(info[-1]))
+                    print(info[-1])
+
+            #if right arrow key does not exist, we have reached the end. else, get next page
+            if psycho_soup.find("span", {"class": "chevron-right"}):
+                pageNum += 1
+                nextPage = requests.get(url + f"{pageNum * 20 + 1}", headers= getRandomHeader())
+                print(f"_______________________NEW PAGE {pageNum}_______________________")
+            else:
+                break
         
     return info
 
+#for fields we can't find
+EMPTY = "N/A"
+#card = link of the therapist page
 def get_therapist_info(card):
-    card_soup = BeautifulSoup(requests.get(card, headers= HEADER).text, "html.parser")
+
+    card_soup = BeautifulSoup(requests.get(card, headers= getRandomHeader()).text, "html.parser")
 
     name = card_soup.find('h1', {'itemprop': 'name'}).text
 
     number_tab = card_soup.find('a', {'id': 'phone-click-reveal'})
-
-    number = "".join(filter(lambda x: x.isnumeric(), list(number_tab.text.strip()))) if number_tab else "See Website"
+    number = "".join(filter(lambda x: x.isnumeric(), list(number_tab.text.strip()))) if number_tab else EMPTY
     number = number[:11]
 
-    address = []
-    for addy_part in card_soup.find("div", {"class": "address-data"}).children:
-        if addy_part and isinstance(addy_part, bs4.element.Tag) and addy_part.text and addy_part.has_attr("itemprop"):
-            address.append(addy_part.text.strip())
+    street = EMPTY
+    citystate = EMPTY
+    postalcode = EMPTY
+    addy_soup = card_soup.find("div", {"class": "address-data"})
+    if addy_soup:
+        #street
+        street = addy_soup.find("span", {"itemprop": "streetAddress"}).text.strip() if addy_soup.find("span", {"itemprop": "streetAddress"}) else EMPTY
 
+        #citystate
+        if addy_soup.find("span", {"itemprop": "addressLocality"}) and addy_soup.find("span", {"itemprop": "addressRegion"}):
+            citystate = addy_soup.find("span", {"itemprop": "addressLocality"}).text.strip() + " " + addy_soup.find("span", {"itemprop": "addressRegion"}).text.strip()
+        elif addy_soup.find("span", {"itemprop": "addressLocality"}):
+            citystate = addy_soup.find("span", {"itemprop": "addressLocality"}).text.strip()
+        elif addy_soup.find("span", {"itemprop": "addressRegion"}):
+            citystate = addy_soup.find("span", {"itemprop": "addressRegion"}).text.strip()
+
+        #postalcode
+        postalcode = addy_soup.find("span", {"itemprop": "postalcode"}).text.strip() if addy_soup.find("span", {"itemprop": "postalcode"}) else EMPTY
+
+    #not elegant, but not all therapists have services/issues in their respective tabs. rather, some of them just have it in their bios.
+    
+    services = []
     issues = []
-    issues_tab = card_soup.find('div', {'class': 'attributes-issues'}).find('ul', {'class': 'attribute-list'}).children
-    if issues_tab:
-        for issue in issues_tab:
-            if issue.text.strip() == "ADHD" or issue.text.strip() == "Testing and Evaluation" or issue.text.strip() == "Learning Disabilities":
-                issues.append(issue.text.strip())
+    services.append("Counseling")
+    if card_soup.find_all(text=lambda x: x and ("evaluation" in x or "Evaluation" in x or "testing" in x or "Testing" in x)):
+        services.append("Testing and Evaluation")
+    
+    #All of them should at serve for LD
+    issues.append("Learning Disabilities")
+    if card_soup.find_all(text=lambda x: x and "ADHD" in x):
+        issues.append("ADHD")
+    if card_soup.find_all(text=lambda x: x and ("dysgraphia" in x or "Dysgraphia" in x)):
+        issues.append("Dysgraphia")
 
-        issues = ", ".join(filter(lambda x: x,(issues)))
-
-    else:
-        issues = "N/A"
-
+    #show age groups as show in psychotoday
     age_groups = []
     age_tab = card_soup.find('div', {'class': 'attributes-age-focus'})
     if age_tab and age_tab.find('ul', {'class': 'attribute-list'}).children:
@@ -71,14 +108,15 @@ def get_therapist_info(card):
         age_groups = ", ".join(filter(lambda x: x,(age_groups)))
 
     else:
-        age_groups = "N/A"
+        age_groups = EMPTY
 
 
     finance_tab = card_soup.find('div', {'id': 'tabs-finances-office'})
-    cost = "N/A"
-    sliding_scale = "N/A"
+    cost = EMPTY
+    sliding_scale = EMPTY
     insurances_list = []
-    insurances = "N/A"
+    #if insurance info could not be found, label it empty
+    insurances = EMPTY
     if finance_tab:
         cost_tab = finance_tab.find(class_ = "finances-office")
         if cost_tab and cost_tab.ul and cost_tab.ul.li:
@@ -101,12 +139,15 @@ def get_therapist_info(card):
             
             insurances = ", ".join(filter(lambda x: x,(insurances_list)))
 
+
+
     
     profile_tab = card_soup.find('div', {'class': 'profile-buttons'})
     website = card
     if profile_tab:
         website_button = profile_tab.find('a', {'data-event-label': 'website'})
         if website_button:
+            #website urls are redirects. need to access the link and find the original website
             redirect_url = website_button["href"]
             redirect_request = request.Request(redirect_url)
             redirect_request.add_header("User-Agent", 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36')
@@ -117,19 +158,17 @@ def get_therapist_info(card):
                 website = e
 
     qualifications_tab = card_soup.find('div', {'class': 'profile-qualifications'})
-    years_in_practice = "N/A"
-    license = "N/A"
-    school = "N/A"
-    grad_year = "N/A"
+    years_in_practice = EMPTY
+    license = EMPTY
+    school = EMPTY
+    grad_year = EMPTY
     if qualifications_tab and qualifications_tab.ul:
-
         for quals in qualifications_tab.ul:
             if quals and isinstance(quals, bs4.element.Tag) and quals.strong:
   
                 category = quals.strong.text
                 unwanted = quals.find('strong')  
                 unwanted.extract()
-
 
                 if category == "Years in Practice:":
                     years_in_practice = quals.text.strip()
@@ -141,8 +180,8 @@ def get_therapist_info(card):
                     grad_year = quals.text.strip()
 
     credentials_tab = card_soup.find('div', {'class': 'profile-additional-credentials'})
-    certificate = "N/A"
-    date = "N/A"
+    certificate = EMPTY
+    date = EMPTY
     if credentials_tab and credentials_tab.ul:
         for cert in credentials_tab.ul:
             if cert and isinstance(cert, bs4.element.Tag) and cert.strong:
@@ -155,5 +194,10 @@ def get_therapist_info(card):
                 elif category == "Certificate Date:":
                     date = cert.text.strip()
 
-    
-    return (name, issues, age_groups, years_in_practice, license, school, grad_year, certificate, date, cost, sliding_scale, insurances, website, number, " ".join(address))
+    return (name, ", ".join(issues), ", ".join(services), age_groups, years_in_practice, license, school, grad_year, certificate, date, cost, sliding_scale, insurances, website, number, street, citystate, postalcode)
+
+def getRandomHeader():
+    return HEADERS[random.randint(0,1)]
+
+def getRandomSleepTime():
+    return SLEEP_TIMES[random.randint(0,3)]
