@@ -2,7 +2,7 @@ import requests
 import random
 import pandas as pd
 import numpy as np
-import string
+import os
 
 
 
@@ -10,7 +10,7 @@ import string
 HEADERS = [{'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'},
            {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:20.0) Gecko/20100101 Firefox/20.0'}]
 SLEEP_TIMES = [0.5, 0.7, 1, 1.2]
-AUTH = {"authorization": "Bearer 8mw0vs7ziibql03va7lf1bf4l"}
+AUTH = {"authorization": f"Bearer {os.environ.get('AVVO_BEARER')}"}
 
 ADDY_BASS_URL = ""
 
